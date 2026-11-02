@@ -34,6 +34,8 @@ type Store struct {
 	// frictionIssueLinksMissing is set when the schema predates
 	// friction_issue_links; see frictionIssueSelect.
 	frictionIssueLinksMissing atomic.Bool
+	// frictionFilingStateMissing is the same for friction_filing_state.
+	frictionFilingStateMissing atomic.Bool
 
 	pricingMu     sync.Mutex
 	pricingLoadMu sync.Mutex
