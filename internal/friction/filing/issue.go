@@ -41,7 +41,8 @@ type issueContext struct {
 // copy of sig whose text fields passed through redact, which masks secrets
 // and home directories before they leave the machine. Redacting the whole
 // fields first keeps truncation and Markdown quoting from hiding a secret
-// from the scanner.
+// from the scanner; text a detector already cut loses the end the cut may
+// have split.
 func buildIssue(sig friction.Signal, ic issueContext) kata.CreateIssue {
 	md := map[string]any{
 		MetadataFingerprint:      sig.Fingerprint(),
@@ -55,6 +56,7 @@ func buildIssue(sig friction.Signal, ic issueContext) kata.CreateIssue {
 		}
 	}
 	shown := sig
+	shown.Text = friction.WithoutCutTail(sig.Kind, sig.Text)
 	for _, f := range []*string{&shown.SubjectID, &shown.Text, &shown.ToolName, &shown.Label, &shown.Evidence} {
 		*f = redact(*f)
 	}

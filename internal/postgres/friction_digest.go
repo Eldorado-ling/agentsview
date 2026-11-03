@@ -38,8 +38,10 @@ func (s *Store) frictionSessionVersionColumn(ctx context.Context) (string, error
 // DetectFrictionAvailability probes the review tables inside a rolled-back
 // transaction. A missing table or a read-only role disables the job; any
 // other failure is logged and also disables it, so startup never fails on
-// an optional feature (spec §20).
+// an optional feature (spec §20). It also notes a schema that predates the
+// Kata issue links table, so pattern reads skip the link join.
 func (s *Store) DetectFrictionAvailability(ctx context.Context) {
+	s.frictionIssueLinksMissing.Store(!pgHasTable(ctx, s.pg, "friction_issue_links"))
 	for _, table := range []string{"friction_digests", "friction_digest_sessions", "friction_patterns"} {
 		if !pgHasTable(ctx, s.pg, table) {
 			s.frictionAvailable.Store(false)

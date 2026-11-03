@@ -152,12 +152,12 @@ func (s *Store) ListFrictionPatterns(
 	}
 	limitParam := pb.add(limit + 1)
 	offsetParam := pb.add(offset)
+	issueColumns, issueJoin := s.frictionIssueSelect()
 	rows, err := s.pg.QueryContext(ctx, `
 		SELECT p.fingerprint, p.kind, p.title, p.first_seen_date,
 			p.last_seen_date, p.occurrence_count, p.session_count,
-			p.last_subject_id, p.last_ordinal, `+frictionIssueColumns+`
-		FROM friction_patterns p
-		LEFT JOIN friction_issue_links l ON l.fingerprint = p.fingerprint `+where+`
+			p.last_subject_id, p.last_ordinal, `+issueColumns+`
+		FROM friction_patterns p `+issueJoin+` `+where+`
 		ORDER BY p.occurrence_count DESC, p.last_seen_date DESC, p.fingerprint ASC
 		LIMIT `+limitParam+` OFFSET `+offsetParam, pb.args...)
 	if err != nil {

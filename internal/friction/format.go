@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"go.kenn.io/agentsview/internal/stringutil"
 )
@@ -20,6 +21,28 @@ func TruncateRunes(s string, n int) string {
 // when text was removed.
 func TruncateWithMarker(s string, n int) string {
 	return stringutil.TruncateRunes(s, n, truncatedMarker)
+}
+
+// WithoutCutTail returns text as a detector of kind k stored it, minus the
+// end its length limit may have split: the last token, or a private key
+// block left without its END line. A secret split that way no longer
+// matches the secret scanner, so text bound off the machine drops it. A
+// cut text keeps the truncation marker; other text is returned unchanged.
+func WithoutCutTail(k Kind, text string) string {
+	head := text
+	switch {
+	case k == KindError && strings.HasSuffix(text, truncatedMarker):
+		head = strings.TrimSuffix(text, truncatedMarker)
+	case k == KindWorkaround && utf8.RuneCountInString(text) >= workaroundContextRunes:
+	default:
+		return text
+	}
+	if i := strings.LastIndex(head, "-----BEGIN "); i >= 0 && !strings.Contains(head[i:], "-----END ") {
+		head = head[:i]
+	} else {
+		head = head[:max(strings.LastIndexFunc(head, unicode.IsSpace), 0)]
+	}
+	return strings.TrimRightFunc(head, unicode.IsSpace) + truncatedMarker
 }
 
 // PythonRepr approximates Python repr() for a string: single quotes;

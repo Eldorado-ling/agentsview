@@ -31,6 +31,9 @@ type Store struct {
 	insightCapabilityMu        sync.RWMutex
 	insightGenerationAvailable bool
 	frictionAvailable          atomic.Bool
+	// frictionIssueLinksMissing is set when the schema predates
+	// friction_issue_links; see frictionIssueSelect.
+	frictionIssueLinksMissing atomic.Bool
 
 	pricingMu     sync.Mutex
 	pricingLoadMu sync.Mutex

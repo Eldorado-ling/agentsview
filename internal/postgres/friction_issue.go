@@ -49,6 +49,17 @@ func (s *Store) DeleteFrictionIssueLink(ctx context.Context, fingerprint string)
 const frictionIssueColumns = `l.kata_instance_uid, l.kata_project_uid,
 	l.issue_uid, l.qualified_id, l.web_url, l.source, l.linked_at`
 
+// frictionIssueSelect returns the link columns and join a pattern read
+// adds. A read-only role serving a schema that predates the links table
+// cannot create it, so its pattern reads show every pattern unlinked
+// instead of failing.
+func (s *Store) frictionIssueSelect() (columns, join string) {
+	if s.frictionIssueLinksMissing.Load() {
+		return `NULL, NULL, NULL, NULL, NULL, NULL, NULL`, ""
+	}
+	return frictionIssueColumns, `LEFT JOIN friction_issue_links l ON l.fingerprint = p.fingerprint`
+}
+
 type frictionIssueScan struct {
 	instance, project, issue, qualified, url, source sql.NullString
 	linkedAt                                         sql.NullTime

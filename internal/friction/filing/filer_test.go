@@ -220,6 +220,50 @@ func TestPreviewMasksSecretsThatTruncationOrQuotingWouldHide(t *testing.T) {
 	}
 }
 
+func TestPreviewWithholdsWhatADetectorCutMayHaveSplit(t *testing.T) {
+	const pemBody = "MC4CAQAwBQYDK2VwBCIEIHNhJUCu8VvJCV4O++0jHhjsfn4SwMjf3+3zctpGdZMe"
+	url := "postgres://user:s3cretP4ss@db.example.test:5432/app"
+	tests := []struct {
+		name, secret, kept string
+		sig                friction.Signal
+	}{
+		{
+			// The workaround detector keeps 200 runes: the password, not
+			// the host that marks it as a credential.
+			name: "workaround_credential", secret: "s3cretP4ss", kept: "I'll use the admin login for now",
+			sig: friction.Signal{
+				Kind: friction.KindWorkaround, Detector: "workaround", Label: "for now",
+				Text: friction.TruncateRunes("I'll use the admin login for now "+strings.Repeat("x", 140)+" "+url, 200),
+			},
+		},
+		{
+			// Errors keep 500 runes and a marker: the key, not its END line.
+			name: "error_private_key", secret: pemBody[:20], kept: "loading the deploy key failed",
+			sig: friction.Signal{
+				Kind: friction.KindError, Detector: "error", ToolName: "Bash",
+				Text: friction.TruncateWithMarker("loading the deploy key failed:\n"+strings.Repeat("y", 410)+
+					"\n-----BEGIN PRIVATE KEY-----\n"+pemBody+"\n-----END PRIVATE KEY-----", friction.MaxErrorMessageLength),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sig := tt.sig
+			sig.SubjectID, sig.SubjectKind, sig.Ordinal = "claude:s1", friction.SubjectSession, new(4)
+			require.Contains(t, sig.Text, tt.secret, "the stored text holds the split secret")
+			s := katatest.New(t)
+			f, _ := newFiler(t, s, katatest.DefaultProjectName, sig)
+
+			req, err := f.Preview(t.Context(), sig.Fingerprint())
+			require.NoError(t, err)
+			assert.NotContains(t, req.Title, tt.secret)
+			assert.NotContains(t, req.Body, tt.secret)
+			assert.Contains(t, req.Body, tt.kept, "text before the cut is still filed")
+			assert.Contains(t, req.Body, "[truncated]")
+		})
+	}
+}
+
 func TestPreviewDescribesThePatternsLastOccurrence(t *testing.T) {
 	first := friction.Signal{
 		Kind: friction.KindError, SubjectID: "claude:s1", SubjectKind: friction.SubjectSession,

@@ -3,6 +3,7 @@
 package postgres
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -236,4 +237,40 @@ func TestFrictionListParity(t *testing.T) {
 			assert.Nil(t, rows[0].Issue, name)
 		}
 	})
+}
+
+// A read-only serve role cannot add friction_issue_links to a schema that
+// predates it; pattern reads must still work and show no links.
+func TestFrictionPatternsReadWithoutTheLinksTable(t *testing.T) {
+	const schema = "agentsview_friction_nolinks_test"
+	pgURL := testPGURL(t)
+	cleanNamedPGSchema(t, pgURL, schema)
+	t.Cleanup(func() { cleanNamedPGSchema(t, pgURL, schema) })
+	ctx := t.Context()
+	pg, err := Open(pgURL, schema, true)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, pg.Close()) })
+	_, err = pg.ExecContext(ctx, "CREATE SCHEMA "+schema)
+	require.NoError(t, err)
+	statements := append(strings.Split(coreDDL, ";\n")[:2], strings.Split(frictionReviewDDL, ";\n")...)
+	for _, statement := range statements {
+		if strings.TrimSpace(statement) != "" {
+			_, err = pg.ExecContext(ctx, statement)
+			require.NoError(t, err)
+		}
+	}
+	_, err = pg.ExecContext(ctx, "DROP TABLE friction_issue_links")
+	require.NoError(t, err)
+	_, err = pg.ExecContext(ctx, `INSERT INTO friction_patterns (fingerprint, kind, title,
+		first_seen_date, last_seen_date, occurrence_count, session_count, last_subject_id)
+		VALUES ('fl1:aaa', 'error', 't', '2026-09-14', '2026-09-14', 2, 1, 's')`)
+	require.NoError(t, err)
+	store := &Store{pg: pg}
+	store.DetectFrictionAvailability(ctx)
+
+	rows, _, err := store.ListFrictionPatterns(ctx, db.FrictionPatternFilter{})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "fl1:aaa", rows[0].Fingerprint)
+	assert.Nil(t, rows[0].Issue)
 }
